@@ -4,9 +4,11 @@ import (
 	"context"
 	"time"
 
+	"github.com/atterpac/temportui/internal/config"
 	"github.com/atterpac/temportui/internal/temporal"
 	"github.com/atterpac/temportui/internal/ui"
 	"github.com/gdamore/tcell/v2"
+	"github.com/rivo/tview"
 )
 
 const (
@@ -63,6 +65,15 @@ func (a *App) setup() {
 
 	// Global key handler
 	a.ui.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		// Skip global handling when command bar or modal inputs are active
+		if a.ui.CommandBar().IsActive() {
+			return event // Let the command bar handle it
+		}
+		frontPage, _ := a.ui.Pages().GetFrontPage()
+		if frontPage == "theme-selector" {
+			return event // Let the modal handle it
+		}
+
 		// Global quit
 		if event.Rune() == 'q' {
 			if a.ui.Pages().Depth() <= 1 {
@@ -82,6 +93,12 @@ func (a *App) setup() {
 		// Help
 		if event.Rune() == '?' {
 			a.showHelp()
+			return nil
+		}
+
+		// Theme selector (capital T)
+		if event.Rune() == 'T' {
+			a.showThemeSelector()
 			return nil
 		}
 
@@ -258,4 +275,86 @@ func (a *App) Stop() {
 func (a *App) showHelp() {
 	// TODO: Implement help modal
 	// For now, the key hints in the menu bar serve as help
+}
+
+func (a *App) showThemeSelector() {
+	themes := config.ThemeNames()
+	currentTheme := ""
+	if t := ui.ActiveTheme(); t != nil {
+		currentTheme = t.Key
+	}
+
+	// Create theme list
+	list := tview.NewList()
+	list.SetBackgroundColor(ui.ColorBg())
+	list.SetMainTextColor(ui.ColorFg())
+	list.SetSecondaryTextColor(ui.ColorFgDim())
+	list.SetSelectedTextColor(ui.ColorBg())
+	list.SetSelectedBackgroundColor(ui.ColorAccent())
+	list.ShowSecondaryText(false)
+	list.SetHighlightFullLine(true)
+
+	// Add themes to list
+	for i, name := range themes {
+		themeName := name // Capture for closure
+		marker := "  "
+		if name == currentTheme {
+			marker = ui.IconCompleted + " "
+		}
+		list.AddItem(marker+name, "", rune('a'+i), func() {
+			if err := ui.SetTheme(themeName); err == nil {
+				// Save to config
+				cfg, _ := config.Load()
+				if cfg == nil {
+					cfg = config.DefaultConfig()
+				}
+				cfg.Theme = themeName
+				_ = config.Save(cfg)
+				// Force redraw to apply new colors
+				a.ui.QueueUpdateDraw(func() {})
+			}
+			a.closeThemeSelector()
+		})
+	}
+
+	// Create modal frame
+	frame := tview.NewFrame(list)
+	frame.SetBackgroundColor(ui.ColorBg())
+	frame.SetBorderColor(ui.ColorPanelBorder())
+	frame.SetBorder(true)
+	frame.SetTitle(" Select Theme ")
+	frame.SetTitleColor(ui.ColorPanelTitle())
+	frame.AddText("[Esc] Close  [Enter] Select", false, tview.AlignCenter, ui.ColorFgDim())
+
+	// Create centered modal
+	modal := tview.NewFlex().SetDirection(tview.FlexRow).
+		AddItem(nil, 0, 1, false).
+		AddItem(tview.NewFlex().
+			AddItem(nil, 0, 1, false).
+			AddItem(frame, 40, 0, true).
+			AddItem(nil, 0, 1, false),
+			len(themes)+4, 0, true).
+		AddItem(nil, 0, 1, false)
+	modal.SetBackgroundColor(ui.ColorBgDark())
+
+	// Handle escape to close
+	list.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		if event.Key() == tcell.KeyEscape {
+			a.closeThemeSelector()
+			return nil
+		}
+		return event
+	})
+
+	// Show modal (AddPage is available via embedded tview.Pages)
+	a.ui.Pages().AddPage("theme-selector", modal, true, true)
+	a.ui.SetFocus(list)
+}
+
+func (a *App) closeThemeSelector() {
+	a.ui.Pages().RemovePage("theme-selector")
+	// Restore focus to current view
+	if current := a.ui.Pages().Current(); current != nil {
+		a.ui.SetFocus(current)
+	}
 }
