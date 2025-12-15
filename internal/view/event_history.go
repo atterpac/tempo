@@ -18,6 +18,8 @@ type EventHistory struct {
 	workflowID  string
 	runID       string
 	table       *ui.Table
+	leftPanel   *ui.Panel
+	rightPanel  *ui.Panel
 	sidePanel   *tview.TextView
 	events      []temporal.HistoryEvent
 	sidePanelOn bool
@@ -27,12 +29,14 @@ type EventHistory struct {
 // NewEventHistory creates a new event history view.
 func NewEventHistory(app *App, workflowID, runID string) *EventHistory {
 	eh := &EventHistory{
-		Flex:       tview.NewFlex().SetDirection(tview.FlexColumn),
-		app:        app,
-		workflowID: workflowID,
-		runID:      runID,
-		table:      ui.NewTable(),
-		events:     []temporal.HistoryEvent{},
+		Flex:        tview.NewFlex().SetDirection(tview.FlexColumn),
+		app:         app,
+		workflowID:  workflowID,
+		runID:       runID,
+		table:       ui.NewTable(),
+		sidePanel:   tview.NewTextView(),
+		events:      []temporal.HistoryEvent{},
+		sidePanelOn: true,
 	}
 	eh.setup()
 	return eh
@@ -42,15 +46,20 @@ func (eh *EventHistory) setup() {
 	eh.SetBackgroundColor(ui.ColorBg)
 
 	eh.table.SetHeaders("ID", "TIME", "TYPE", "DETAILS")
-	eh.table.SetBorder(false) // Charm-style: borderless
+	eh.table.SetBorder(false)
 	eh.table.SetBackgroundColor(ui.ColorBg)
 
-	// Create side panel (hidden initially) - keep minimal border for separation
-	eh.sidePanel = tview.NewTextView().
-		SetDynamicColors(true).
-		SetTextAlign(tview.AlignLeft)
-	eh.sidePanel.SetBorder(false)
-	eh.sidePanel.SetBackgroundColor(ui.ColorBgLight)
+	// Configure side panel
+	eh.sidePanel.SetDynamicColors(true)
+	eh.sidePanel.SetTextAlign(tview.AlignLeft)
+	eh.sidePanel.SetBackgroundColor(ui.ColorBg)
+
+	// Create panels
+	eh.leftPanel = ui.NewPanel("Events")
+	eh.leftPanel.SetContent(eh.table)
+
+	eh.rightPanel = ui.NewPanel("Details")
+	eh.rightPanel.SetContent(eh.sidePanel)
 
 	// Selection change handler
 	eh.table.SetSelectionChangedFunc(func(row, col int) {
@@ -69,8 +78,17 @@ func (eh *EventHistory) setup() {
 		}
 	})
 
-	// Main layout
-	eh.AddItem(eh.table, 0, 2, true)
+	eh.buildLayout()
+}
+
+func (eh *EventHistory) buildLayout() {
+	eh.Clear()
+	if eh.sidePanelOn {
+		eh.AddItem(eh.leftPanel, 0, 3, true)
+		eh.AddItem(eh.rightPanel, 0, 2, false)
+	} else {
+		eh.AddItem(eh.leftPanel, 0, 1, true)
+	}
 }
 
 func (eh *EventHistory) setLoading(loading bool) {
@@ -136,6 +154,9 @@ func (eh *EventHistory) populateTable() {
 
 	if eh.table.RowCount() > 0 {
 		eh.table.SelectRow(0)
+		if len(eh.events) > 0 {
+			eh.updateSidePanel(0)
+		}
 	}
 }
 
@@ -151,13 +172,8 @@ func (eh *EventHistory) showError(err error) {
 }
 
 func (eh *EventHistory) toggleSidePanel() {
-	if eh.sidePanelOn {
-		eh.RemoveItem(eh.sidePanel)
-		eh.sidePanelOn = false
-	} else {
-		eh.AddItem(eh.sidePanel, 0, 1, false)
-		eh.sidePanelOn = true
-	}
+	eh.sidePanelOn = !eh.sidePanelOn
+	eh.buildLayout()
 }
 
 func (eh *EventHistory) updateSidePanel(index int) {
@@ -169,15 +185,26 @@ func (eh *EventHistory) updateSidePanel(index int) {
 	icon := eventIcon(ev.Type)
 	colorTag := eventColorTag(ev.Type)
 
-	text := fmt.Sprintf(
-		"\n [%s]%s Event ID:[%s]    %d\n\n"+
-			" [%s]%s Type:[%s]\n   [%s]%s %s[-]\n\n"+
-			" [%s]%s Time:[%s]\n   %s\n\n"+
-			" [%s]%s Details:[%s]\n   %s\n",
-		ui.TagFgDim, ui.IconBullet, ui.TagFg, ev.ID,
-		ui.TagFgDim, ui.IconBullet, ui.TagFg, colorTag, icon, ev.Type,
-		ui.TagFgDim, ui.IconBullet, ui.TagFg, ev.Time.Format("2006-01-02 15:04:05.000"),
-		ui.TagFgDim, ui.IconBullet, ui.TagFg, ev.Details,
+	text := fmt.Sprintf(`
+[%s::b]Event ID[-:-:-]
+[%s]%d[-]
+
+[%s::b]Type[-:-:-]
+[%s]%s %s[-]
+
+[%s::b]Time[-:-:-]
+[%s]%s[-]
+
+[%s::b]Details[-:-:-]
+[%s]%s[-]`,
+		ui.TagPanelTitle,
+		ui.TagFg, ev.ID,
+		ui.TagPanelTitle,
+		colorTag, icon, ev.Type,
+		ui.TagPanelTitle,
+		ui.TagFg, ev.Time.Format("2006-01-02 15:04:05.000"),
+		ui.TagPanelTitle,
+		ui.TagFgDim, ev.Details,
 	)
 	eh.sidePanel.SetText(text)
 }
@@ -219,7 +246,7 @@ func (eh *EventHistory) Stop() {
 func (eh *EventHistory) Hints() []ui.KeyHint {
 	return []ui.KeyHint{
 		{Key: "enter", Description: "Toggle Detail"},
-		{Key: "p", Description: "Panel"},
+		{Key: "p", Description: "Preview"},
 		{Key: "r", Description: "Refresh"},
 		{Key: "j/k", Description: "Navigate"},
 		{Key: "esc", Description: "Back"},

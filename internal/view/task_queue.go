@@ -25,6 +25,8 @@ type TaskQueueView struct {
 	app            *App
 	queueTable     *ui.Table
 	pollerTable    *ui.Table
+	queuePanel     *ui.Panel
+	pollerPanel    *ui.Panel
 	queues         []taskQueueEntry
 	pollers        []temporal.Poller
 	selectedQueue  string
@@ -35,7 +37,7 @@ type TaskQueueView struct {
 // NewTaskQueueView creates a new task queue view.
 func NewTaskQueueView(app *App) *TaskQueueView {
 	tq := &TaskQueueView{
-		Flex:        tview.NewFlex().SetDirection(tview.FlexRow),
+		Flex:        tview.NewFlex().SetDirection(tview.FlexColumn),
 		app:         app,
 		queueTable:  ui.NewTable(),
 		pollerTable: ui.NewTable(),
@@ -49,15 +51,22 @@ func NewTaskQueueView(app *App) *TaskQueueView {
 func (tq *TaskQueueView) setup() {
 	tq.SetBackgroundColor(ui.ColorBg)
 
-	// Task queues table - Charm-style: borderless
+	// Task queues table
 	tq.queueTable.SetHeaders("NAME", "TYPE", "POLLERS", "BACKLOG")
 	tq.queueTable.SetBorder(false)
 	tq.queueTable.SetBackgroundColor(ui.ColorBg)
 
-	// Pollers table - Charm-style: borderless, subtle bg difference
+	// Pollers table
 	tq.pollerTable.SetHeaders("IDENTITY", "TYPE", "LAST ACCESS")
 	tq.pollerTable.SetBorder(false)
-	tq.pollerTable.SetBackgroundColor(ui.ColorBgLight)
+	tq.pollerTable.SetBackgroundColor(ui.ColorBg)
+
+	// Create panels
+	tq.queuePanel = ui.NewPanel("Task Queues")
+	tq.queuePanel.SetContent(tq.queueTable)
+
+	tq.pollerPanel = ui.NewPanel("Pollers")
+	tq.pollerPanel.SetContent(tq.pollerTable)
 
 	// Update pollers when queue selection changes
 	tq.queueTable.SetSelectionChangedFunc(func(row, col int) {
@@ -70,9 +79,9 @@ func (tq *TaskQueueView) setup() {
 		}
 	})
 
-	// Layout: queues on top, pollers below
-	tq.AddItem(tq.queueTable, 0, 1, true)
-	tq.AddItem(tq.pollerTable, 0, 1, false)
+	// Two-column layout
+	tq.AddItem(tq.queuePanel, 0, 1, true)
+	tq.AddItem(tq.pollerPanel, 0, 1, false)
 }
 
 func (tq *TaskQueueView) setLoading(loading bool) {
@@ -132,6 +141,9 @@ func (tq *TaskQueueView) loadData() {
 
 			tq.populateQueueTable()
 
+			// Update stats bar with queue count
+			tq.app.UI().StatsBar().SetTaskQueueCount(len(tq.queues))
+
 			// Load details for first queue
 			if len(tq.queues) > 0 && tq.queues[0].Name != "(no task queues found)" {
 				tq.loadPollers(0)
@@ -159,6 +171,7 @@ func (tq *TaskQueueView) loadMockQueues() {
 		{Name: "notification-tasks", Type: "Combined", PollerCount: 2, Backlog: 0},
 	}
 	tq.populateQueueTable()
+	tq.app.UI().StatsBar().SetTaskQueueCount(len(tq.queues))
 }
 
 func (tq *TaskQueueView) populateQueueTable() {

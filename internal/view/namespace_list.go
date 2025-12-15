@@ -7,11 +7,14 @@ import (
 	"github.com/atterpac/temportui/internal/temporal"
 	"github.com/atterpac/temportui/internal/ui"
 	"github.com/gdamore/tcell/v2"
+	"github.com/rivo/tview"
 )
 
 // NamespaceList displays a list of Temporal namespaces.
 type NamespaceList struct {
-	*ui.Table
+	*tview.Flex
+	table         *ui.Table
+	panel         *ui.Panel
 	app           *App
 	namespaces    []temporal.Namespace
 	loading       bool
@@ -23,7 +26,8 @@ type NamespaceList struct {
 // NewNamespaceList creates a new namespace list view.
 func NewNamespaceList(app *App) *NamespaceList {
 	nl := &NamespaceList{
-		Table:       ui.NewTable(),
+		Flex:        tview.NewFlex().SetDirection(tview.FlexRow),
+		table:       ui.NewTable(),
 		app:         app,
 		namespaces:  []temporal.Namespace{},
 		stopRefresh: make(chan struct{}),
@@ -33,12 +37,19 @@ func NewNamespaceList(app *App) *NamespaceList {
 }
 
 func (nl *NamespaceList) setup() {
-	nl.SetHeaders("NAME", "STATE", "RETENTION")
-	nl.SetBorder(false) // Charm-style: borderless
+	nl.table.SetHeaders("NAME", "STATE", "RETENTION")
+	nl.table.SetBorder(false)
+	nl.table.SetBackgroundColor(ui.ColorBg)
 	nl.SetBackgroundColor(ui.ColorBg)
 
+	// Create panel
+	nl.panel = ui.NewPanel("Namespaces")
+	nl.panel.SetContent(nl.table)
+
+	nl.AddItem(nl.panel, 0, 1, true)
+
 	// Selection handler
-	nl.SetOnSelect(func(row int) {
+	nl.table.SetOnSelect(func(row int) {
 		if row >= 0 && row < len(nl.namespaces) {
 			nl.app.NavigateToWorkflows(nl.namespaces[row].Name)
 		}
@@ -90,8 +101,8 @@ func (nl *NamespaceList) loadMockData() {
 }
 
 func (nl *NamespaceList) populateTable() {
-	nl.ClearRows()
-	nl.SetHeaders("NAME", "STATE", "RETENTION")
+	nl.table.ClearRows()
+	nl.table.SetHeaders("NAME", "STATE", "RETENTION")
 
 	for _, ns := range nl.namespaces {
 		stateIcon := ui.IconConnected
@@ -100,22 +111,22 @@ func (nl *NamespaceList) populateTable() {
 			stateIcon = ui.IconDisconnected
 			color = ui.ColorFgDim
 		}
-		nl.AddColoredRow(color,
+		nl.table.AddColoredRow(color,
 			ui.IconNamespace+" "+ns.Name,
 			stateIcon+" "+ns.State,
 			ns.RetentionPeriod,
 		)
 	}
 
-	if nl.RowCount() > 0 {
-		nl.SelectRow(0)
+	if nl.table.RowCount() > 0 {
+		nl.table.SelectRow(0)
 	}
 }
 
 func (nl *NamespaceList) showError(err error) {
-	nl.ClearRows()
-	nl.SetHeaders("NAME", "STATE", "RETENTION")
-	nl.AddColoredRow(ui.ColorFailed,
+	nl.table.ClearRows()
+	nl.table.SetHeaders("NAME", "STATE", "RETENTION")
+	nl.table.AddColoredRow(ui.ColorFailed,
 		ui.IconFailed+" Error loading namespaces",
 		err.Error(),
 		"",
@@ -166,7 +177,7 @@ func (nl *NamespaceList) Name() string {
 
 // Start is called when the view becomes active.
 func (nl *NamespaceList) Start() {
-	nl.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+	nl.table.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		switch event.Rune() {
 		case 'q':
 			nl.app.UI().Stop()
@@ -186,7 +197,7 @@ func (nl *NamespaceList) Start() {
 
 // Stop is called when the view is deactivated.
 func (nl *NamespaceList) Stop() {
-	nl.SetInputCapture(nil)
+	nl.table.SetInputCapture(nil)
 	nl.stopAutoRefresh()
 }
 

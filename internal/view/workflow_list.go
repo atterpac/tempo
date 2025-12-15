@@ -11,16 +11,20 @@ import (
 	"github.com/rivo/tview"
 )
 
-// WorkflowList displays a list of workflows.
+// WorkflowList displays a list of workflows with a preview panel.
 type WorkflowList struct {
 	*tview.Flex
 	app           *App
 	namespace     string
 	table         *ui.Table
+	leftPanel     *ui.Panel
+	rightPanel    *ui.Panel
+	preview       *tview.TextView
 	workflows     []temporal.Workflow
 	filterText    string
 	loading       bool
 	autoRefresh   bool
+	showPreview   bool
 	refreshTicker *time.Ticker
 	stopRefresh   chan struct{}
 }
@@ -28,11 +32,13 @@ type WorkflowList struct {
 // NewWorkflowList creates a new workflow list view.
 func NewWorkflowList(app *App, namespace string) *WorkflowList {
 	wl := &WorkflowList{
-		Flex:        tview.NewFlex().SetDirection(tview.FlexRow),
+		Flex:        tview.NewFlex().SetDirection(tview.FlexColumn),
 		app:         app,
 		namespace:   namespace,
 		table:       ui.NewTable(),
+		preview:     tview.NewTextView(),
 		workflows:   []temporal.Workflow{},
+		showPreview: true,
 		stopRefresh: make(chan struct{}),
 	}
 	wl.setup()
@@ -40,12 +46,32 @@ func NewWorkflowList(app *App, namespace string) *WorkflowList {
 }
 
 func (wl *WorkflowList) setup() {
-	wl.table.SetHeaders("WORKFLOW ID", "TYPE", "STATUS", "START TIME", "END TIME")
-	wl.table.SetBorder(false) // Charm-style: borderless
+	wl.table.SetHeaders("WORKFLOW ID", "TYPE", "STATUS", "START TIME")
+	wl.table.SetBorder(false)
 	wl.table.SetBackgroundColor(ui.ColorBg)
 	wl.SetBackgroundColor(ui.ColorBg)
 
-	// Selection handler
+	// Configure preview
+	wl.preview.SetDynamicColors(true)
+	wl.preview.SetBackgroundColor(ui.ColorBg)
+	wl.preview.SetTextColor(ui.ColorFg)
+	wl.preview.SetWordWrap(true)
+
+	// Create panels
+	wl.leftPanel = ui.NewPanel("Workflows")
+	wl.leftPanel.SetContent(wl.table)
+
+	wl.rightPanel = ui.NewPanel("Preview")
+	wl.rightPanel.SetContent(wl.preview)
+
+	// Selection change handler to update preview
+	wl.table.SetSelectionChangedFunc(func(row, col int) {
+		if row > 0 && row-1 < len(wl.workflows) {
+			wl.updatePreview(wl.workflows[row-1])
+		}
+	})
+
+	// Selection handler for drill-down
 	wl.table.SetOnSelect(func(row int) {
 		if row >= 0 && row < len(wl.workflows) {
 			wf := wl.workflows[row]
@@ -53,7 +79,79 @@ func (wl *WorkflowList) setup() {
 		}
 	})
 
-	wl.AddItem(wl.table, 0, 1, true)
+	wl.buildLayout()
+}
+
+func (wl *WorkflowList) buildLayout() {
+	wl.Clear()
+	if wl.showPreview {
+		wl.AddItem(wl.leftPanel, 0, 3, true)
+		wl.AddItem(wl.rightPanel, 0, 2, false)
+	} else {
+		wl.AddItem(wl.leftPanel, 0, 1, true)
+	}
+}
+
+func (wl *WorkflowList) togglePreview() {
+	wl.showPreview = !wl.showPreview
+	wl.buildLayout()
+}
+
+func (wl *WorkflowList) updatePreview(w temporal.Workflow) {
+	now := time.Now()
+	statusColor := ui.StatusColorTag(w.Status)
+	statusIcon := ui.StatusIcon(w.Status)
+
+	endTimeStr := "-"
+	durationStr := "-"
+	if w.EndTime != nil {
+		endTimeStr = formatRelativeTime(now, *w.EndTime)
+		durationStr = w.EndTime.Sub(w.StartTime).Round(time.Second).String()
+	} else if w.Status == "Running" {
+		durationStr = time.Since(w.StartTime).Round(time.Second).String()
+	}
+
+	text := fmt.Sprintf(`[%s::b]Workflow[-:-:-]
+[%s]%s[-]
+
+[%s]Status[-]
+[%s]%s %s[-]
+
+[%s]Type[-]
+[%s]%s[-]
+
+[%s]Started[-]
+[%s]%s[-]
+
+[%s]Ended[-]
+[%s]%s[-]
+
+[%s]Duration[-]
+[%s]%s[-]
+
+[%s]Task Queue[-]
+[%s]%s[-]
+
+[%s]Run ID[-]
+[%s]%s[-]`,
+		ui.TagPanelTitle,
+		ui.TagFg, truncate(w.ID, 35),
+		ui.TagFgDim,
+		statusColor, statusIcon, w.Status,
+		ui.TagFgDim,
+		ui.TagFg, w.Type,
+		ui.TagFgDim,
+		ui.TagFg, formatRelativeTime(now, w.StartTime),
+		ui.TagFgDim,
+		ui.TagFg, endTimeStr,
+		ui.TagFgDim,
+		ui.TagFg, durationStr,
+		ui.TagFgDim,
+		ui.TagFg, w.TaskQueue,
+		ui.TagFgDim,
+		ui.TagFgDim, truncate(w.RunID, 30),
+	)
+	wl.preview.SetText(text)
 }
 
 func (wl *WorkflowList) setLoading(loading bool) {
@@ -87,6 +185,7 @@ func (wl *WorkflowList) loadData() {
 			}
 			wl.workflows = workflows
 			wl.populateTable()
+			wl.updateStats()
 		})
 	}()
 }
@@ -122,6 +221,7 @@ func (wl *WorkflowList) loadMockData() {
 		},
 	}
 	wl.populateTable()
+	wl.updateStats()
 }
 
 func ptr[T any](v T) *T {
@@ -130,37 +230,49 @@ func ptr[T any](v T) *T {
 
 func (wl *WorkflowList) populateTable() {
 	wl.table.ClearRows()
-	wl.table.SetHeaders("WORKFLOW ID", "TYPE", "STATUS", "START TIME", "END TIME")
+	wl.table.SetHeaders("WORKFLOW ID", "TYPE", "STATUS", "START TIME")
 
 	now := time.Now()
 	for _, w := range wl.workflows {
-		endTime := ui.IconDot + " -"
-		if w.EndTime != nil {
-			endTime = formatRelativeTime(now, *w.EndTime)
-		}
-
 		// Use AddStyledRow for status icon and coloring
 		wl.table.AddStyledRow(w.Status,
 			truncate(w.ID, 25),
-			w.Type,
+			truncate(w.Type, 15),
 			w.Status,
 			formatRelativeTime(now, w.StartTime),
-			endTime,
 		)
 	}
 
 	if wl.table.RowCount() > 0 {
 		wl.table.SelectRow(0)
+		// Update preview for first item
+		if len(wl.workflows) > 0 {
+			wl.updatePreview(wl.workflows[0])
+		}
 	}
+}
+
+func (wl *WorkflowList) updateStats() {
+	running, completed, failed := 0, 0, 0
+	for _, w := range wl.workflows {
+		switch w.Status {
+		case "Running":
+			running++
+		case "Completed":
+			completed++
+		case "Failed":
+			failed++
+		}
+	}
+	wl.app.UI().StatsBar().SetWorkflowStats(running, completed, failed)
 }
 
 func (wl *WorkflowList) showError(err error) {
 	wl.table.ClearRows()
-	wl.table.SetHeaders("WORKFLOW ID", "TYPE", "STATUS", "START TIME", "END TIME")
+	wl.table.SetHeaders("WORKFLOW ID", "TYPE", "STATUS", "START TIME")
 	wl.table.AddColoredRow(ui.ColorFailed,
 		ui.IconFailed+" Error loading workflows",
 		err.Error(),
-		"",
 		"",
 		"",
 	)
@@ -224,6 +336,9 @@ func (wl *WorkflowList) Start() {
 		case 'r':
 			wl.loadData()
 			return nil
+		case 'p':
+			wl.togglePreview()
+			return nil
 		}
 		return event
 	})
@@ -243,6 +358,7 @@ func (wl *WorkflowList) Hints() []ui.KeyHint {
 		{Key: "enter", Description: "Detail"},
 		{Key: "/", Description: "Filter"},
 		{Key: "r", Description: "Refresh"},
+		{Key: "p", Description: "Preview"},
 		{Key: "a", Description: "Auto-refresh"},
 		{Key: "t", Description: "Task Queues"},
 		{Key: "j/k", Description: "Navigate"},
