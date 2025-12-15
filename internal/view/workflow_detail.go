@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/atterpac/temportui/internal/config"
 	"github.com/atterpac/temportui/internal/temporal"
 	"github.com/atterpac/temportui/internal/ui"
 	"github.com/gdamore/tcell/v2"
@@ -15,19 +16,19 @@ import (
 // WorkflowDetail displays detailed information about a workflow with events.
 type WorkflowDetail struct {
 	*tview.Flex
-	app             *App
-	workflowID      string
-	runID           string
-	workflow        *temporal.Workflow
-	events          []temporal.HistoryEvent
-	leftFlex        *tview.Flex
-	workflowPanel   *ui.Panel
+	app              *App
+	workflowID       string
+	runID            string
+	workflow         *temporal.Workflow
+	events           []temporal.HistoryEvent
+	leftFlex         *tview.Flex
+	workflowPanel    *ui.Panel
 	eventDetailPanel *ui.Panel
-	eventsPanel     *ui.Panel
-	workflowView    *tview.TextView
-	eventDetailView *tview.TextView
-	eventTable      *ui.Table
-	loading         bool
+	eventsPanel      *ui.Panel
+	workflowView     *tview.TextView
+	eventDetailView  *tview.TextView
+	eventTable       *ui.Table
+	loading          bool
 }
 
 // NewWorkflowDetail creates a new workflow detail view.
@@ -44,24 +45,24 @@ func NewWorkflowDetail(app *App, workflowID, runID string) *WorkflowDetail {
 }
 
 func (wd *WorkflowDetail) setup() {
-	wd.SetBackgroundColor(ui.ColorBg)
+	wd.SetBackgroundColor(ui.ColorBg())
 
 	// Combined workflow info view
 	wd.workflowView = tview.NewTextView().
 		SetDynamicColors(true).
 		SetTextAlign(tview.AlignLeft)
-	wd.workflowView.SetBackgroundColor(ui.ColorBg)
+	wd.workflowView.SetBackgroundColor(ui.ColorBg())
 
 	// Event detail view
 	wd.eventDetailView = tview.NewTextView().
 		SetDynamicColors(true).
 		SetTextAlign(tview.AlignLeft)
-	wd.eventDetailView.SetBackgroundColor(ui.ColorBg)
+	wd.eventDetailView.SetBackgroundColor(ui.ColorBg())
 
 	// Event table
 	wd.eventTable.SetHeaders("ID", "TIME", "TYPE")
 	wd.eventTable.SetBorder(false)
-	wd.eventTable.SetBackgroundColor(ui.ColorBg)
+	wd.eventTable.SetBackgroundColor(ui.ColorBg())
 
 	// Create panels
 	wd.workflowPanel = ui.NewPanel("Workflow")
@@ -75,7 +76,7 @@ func (wd *WorkflowDetail) setup() {
 
 	// Left side: workflow info + event detail stacked
 	wd.leftFlex = tview.NewFlex().SetDirection(tview.FlexRow)
-	wd.leftFlex.SetBackgroundColor(ui.ColorBg)
+	wd.leftFlex.SetBackgroundColor(ui.ColorBg())
 	wd.leftFlex.AddItem(wd.workflowPanel, 0, 1, false)
 	wd.leftFlex.AddItem(wd.eventDetailPanel, 0, 1, false)
 
@@ -91,7 +92,22 @@ func (wd *WorkflowDetail) setup() {
 	})
 
 	// Show loading state initially
-	wd.workflowView.SetText(fmt.Sprintf("\n [%s]Loading...[-]", ui.TagFgDim))
+	wd.workflowView.SetText(fmt.Sprintf("\n [%s]Loading...[-]", ui.TagFgDim()))
+
+	// Register for theme changes
+	ui.OnThemeChange(func(_ *config.ParsedTheme) {
+		wd.SetBackgroundColor(ui.ColorBg())
+		wd.leftFlex.SetBackgroundColor(ui.ColorBg())
+		wd.workflowView.SetBackgroundColor(ui.ColorBg())
+		wd.eventDetailView.SetBackgroundColor(ui.ColorBg())
+		// Re-render with new colors
+		if wd.workflow != nil {
+			wd.render()
+		}
+		if len(wd.events) > 0 {
+			wd.populateEventTable()
+		}
+	})
 }
 
 func (wd *WorkflowDetail) setLoading(loading bool) {
@@ -165,13 +181,13 @@ func (wd *WorkflowDetail) loadMockData() {
 }
 
 func (wd *WorkflowDetail) showError(err error) {
-	wd.workflowView.SetText(fmt.Sprintf("\n [%s]Error: %s[-]", ui.TagFailed, err.Error()))
+	wd.workflowView.SetText(fmt.Sprintf("\n [%s]Error: %s[-]", ui.TagFailed(), err.Error()))
 	wd.eventDetailView.SetText("")
 }
 
 func (wd *WorkflowDetail) render() {
 	if wd.workflow == nil {
-		wd.workflowView.SetText(fmt.Sprintf(" [%s]Workflow not found[-]", ui.TagFailed))
+		wd.workflowView.SetText(fmt.Sprintf(" [%s]Workflow not found[-]", ui.TagFailed()))
 		return
 	}
 
@@ -196,13 +212,13 @@ func (wd *WorkflowDetail) render() {
 [%s::b]Duration[-:-:-]     [%s]%s[-]
 [%s::b]Task Queue[-:-:-]   [%s]%s[-]
 [%s::b]Run ID[-:-:-]       [%s]%s[-]`,
-		ui.TagFgDim, ui.TagFg, w.ID,
-		ui.TagFgDim, ui.TagFg, w.Type,
-		ui.TagFgDim, statusColor, statusIcon, w.Status,
-		ui.TagFgDim, ui.TagFg, formatRelativeTime(now, w.StartTime),
-		ui.TagFgDim, ui.TagFg, durationStr,
-		ui.TagFgDim, ui.TagFg, w.TaskQueue,
-		ui.TagFgDim, ui.TagFgDim, truncateStr(w.RunID, 25),
+		ui.TagFgDim(), ui.TagFg(), w.ID,
+		ui.TagFgDim(), ui.TagFg(), w.Type,
+		ui.TagFgDim(), statusColor, statusIcon, w.Status,
+		ui.TagFgDim(), ui.TagFg(), formatRelativeTime(now, w.StartTime),
+		ui.TagFgDim(), ui.TagFg(), durationStr,
+		ui.TagFgDim(), ui.TagFg(), w.TaskQueue,
+		ui.TagFgDim(), ui.TagFgDim(), truncateStr(w.RunID, 25),
 	)
 	wd.workflowView.SetText(workflowText)
 }
@@ -220,9 +236,9 @@ func (wd *WorkflowDetail) updateEventDetail(ev temporal.HistoryEvent) {
 [%s::b]Time[-:-:-]         [%s]%s[-]
 
 %s`,
-		ui.TagFgDim, ui.TagFg, ev.ID,
-		ui.TagFgDim, colorTag, icon, ev.Type,
-		ui.TagFgDim, ui.TagFg, ev.Time.Format("2006-01-02 15:04:05.000"),
+		ui.TagFgDim(), ui.TagFg(), ev.ID,
+		ui.TagFgDim(), colorTag, icon, ev.Type,
+		ui.TagFgDim(), ui.TagFg(), ev.Time.Format("2006-01-02 15:04:05.000"),
 		formattedDetails,
 	)
 	wd.eventDetailView.SetText(detailText)
@@ -231,7 +247,7 @@ func (wd *WorkflowDetail) updateEventDetail(ev temporal.HistoryEvent) {
 // formatEventDetails parses comma-separated key:value pairs and formats them nicely
 func formatEventDetails(details string) string {
 	if details == "" {
-		return fmt.Sprintf("[%s]No details[-]", ui.TagFgDim)
+		return fmt.Sprintf("[%s]No details[-]", ui.TagFgDim())
 	}
 
 	var sb strings.Builder
@@ -249,10 +265,10 @@ func formatEventDetails(details string) string {
 		if idx := strings.Index(part, ": "); idx > 0 {
 			key := part[:idx]
 			value := part[idx+2:]
-			sb.WriteString(fmt.Sprintf("[%s::b]%s:[-:-:-] [%s]%s[-]\n", ui.TagFgDim, key, ui.TagFg, value))
+			sb.WriteString(fmt.Sprintf("[%s::b]%s:[-:-:-] [%s]%s[-]\n", ui.TagFgDim(), key, ui.TagFg(), value))
 		} else {
 			// No colon found, just display as-is
-			sb.WriteString(fmt.Sprintf("[%s]%s[-]\n", ui.TagFg, part))
+			sb.WriteString(fmt.Sprintf("[%s]%s[-]\n", ui.TagFg(), part))
 		}
 	}
 

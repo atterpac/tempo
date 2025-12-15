@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/atterpac/temportui/internal/config"
 	"github.com/atterpac/temportui/internal/temporal"
 	"github.com/atterpac/temportui/internal/ui"
 	"github.com/gdamore/tcell/v2"
@@ -43,16 +44,16 @@ func NewEventHistory(app *App, workflowID, runID string) *EventHistory {
 }
 
 func (eh *EventHistory) setup() {
-	eh.SetBackgroundColor(ui.ColorBg)
+	eh.SetBackgroundColor(ui.ColorBg())
 
 	eh.table.SetHeaders("ID", "TIME", "TYPE", "DETAILS")
 	eh.table.SetBorder(false)
-	eh.table.SetBackgroundColor(ui.ColorBg)
+	eh.table.SetBackgroundColor(ui.ColorBg())
 
 	// Configure side panel
 	eh.sidePanel.SetDynamicColors(true)
 	eh.sidePanel.SetTextAlign(tview.AlignLeft)
-	eh.sidePanel.SetBackgroundColor(ui.ColorBg)
+	eh.sidePanel.SetBackgroundColor(ui.ColorBg())
 
 	// Create panels
 	eh.leftPanel = ui.NewPanel("Events")
@@ -75,6 +76,16 @@ func (eh *EventHistory) setup() {
 			if eh.sidePanelOn {
 				eh.updateSidePanel(row - 1)
 			}
+		}
+	})
+
+	// Register for theme changes
+	ui.OnThemeChange(func(_ *config.ParsedTheme) {
+		eh.SetBackgroundColor(ui.ColorBg())
+		eh.sidePanel.SetBackgroundColor(ui.ColorBg())
+		// Re-render with new colors
+		if len(eh.events) > 0 {
+			eh.populateTable()
 		}
 	})
 
@@ -163,7 +174,7 @@ func (eh *EventHistory) populateTable() {
 func (eh *EventHistory) showError(err error) {
 	eh.table.ClearRows()
 	eh.table.SetHeaders("ID", "TIME", "TYPE", "DETAILS")
-	eh.table.AddColoredRow(ui.ColorFailed,
+	eh.table.AddColoredRow(ui.ColorFailed(),
 		"",
 		"",
 		ui.IconFailed+" Error loading events",
@@ -197,14 +208,14 @@ func (eh *EventHistory) updateSidePanel(index int) {
 
 [%s::b]Details[-:-:-]
 [%s]%s[-]`,
-		ui.TagPanelTitle,
-		ui.TagFg, ev.ID,
-		ui.TagPanelTitle,
+		ui.TagPanelTitle(),
+		ui.TagFg(), ev.ID,
+		ui.TagPanelTitle(),
 		colorTag, icon, ev.Type,
-		ui.TagPanelTitle,
-		ui.TagFg, ev.Time.Format("2006-01-02 15:04:05.000"),
-		ui.TagPanelTitle,
-		ui.TagFgDim, ev.Details,
+		ui.TagPanelTitle(),
+		ui.TagFg(), ev.Time.Format("2006-01-02 15:04:05.000"),
+		ui.TagPanelTitle(),
+		ui.TagFgDim(), ev.Details,
 	)
 	eh.sidePanel.SetText(text)
 }
@@ -279,15 +290,15 @@ func eventIcon(eventType string) string {
 func eventColor(eventType string) tcell.Color {
 	switch {
 	case contains(eventType, "Started"):
-		return ui.ColorRunning
+		return ui.ColorRunning()
 	case contains(eventType, "Completed"):
-		return ui.ColorCompleted
+		return ui.ColorCompleted()
 	case contains(eventType, "Failed"):
-		return ui.ColorFailed
+		return ui.ColorFailed()
 	case contains(eventType, "Scheduled"):
-		return ui.ColorFgDim
+		return ui.ColorFgDim()
 	default:
-		return ui.ColorFg
+		return ui.ColorFg()
 	}
 }
 
@@ -295,13 +306,13 @@ func eventColor(eventType string) tcell.Color {
 func eventColorTag(eventType string) string {
 	switch {
 	case contains(eventType, "Started"):
-		return ui.TagRunning
+		return ui.TagRunning()
 	case contains(eventType, "Completed"):
-		return ui.TagCompleted
+		return ui.TagCompleted()
 	case contains(eventType, "Failed"):
-		return ui.TagFailed
+		return ui.TagFailed()
 	default:
-		return ui.TagFg
+		return ui.TagFg()
 	}
 }
 

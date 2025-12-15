@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/atterpac/temportui/internal/config"
 	"github.com/atterpac/temportui/internal/temporal"
 	"github.com/atterpac/temportui/internal/ui"
 	"github.com/gdamore/tcell/v2"
@@ -49,17 +50,17 @@ func NewTaskQueueView(app *App) *TaskQueueView {
 }
 
 func (tq *TaskQueueView) setup() {
-	tq.SetBackgroundColor(ui.ColorBg)
+	tq.SetBackgroundColor(ui.ColorBg())
 
 	// Task queues table
 	tq.queueTable.SetHeaders("NAME", "TYPE", "POLLERS", "BACKLOG")
 	tq.queueTable.SetBorder(false)
-	tq.queueTable.SetBackgroundColor(ui.ColorBg)
+	tq.queueTable.SetBackgroundColor(ui.ColorBg())
 
 	// Pollers table
 	tq.pollerTable.SetHeaders("IDENTITY", "TYPE", "LAST ACCESS")
 	tq.pollerTable.SetBorder(false)
-	tq.pollerTable.SetBackgroundColor(ui.ColorBg)
+	tq.pollerTable.SetBackgroundColor(ui.ColorBg())
 
 	// Create panels
 	tq.queuePanel = ui.NewPanel("Task Queues")
@@ -76,6 +77,18 @@ func (tq *TaskQueueView) setup() {
 		}
 		if row > 0 && row-1 < len(tq.queues) {
 			tq.loadPollers(row - 1)
+		}
+	})
+
+	// Register for theme changes
+	ui.OnThemeChange(func(_ *config.ParsedTheme) {
+		tq.SetBackgroundColor(ui.ColorBg())
+		// Re-render tables with new colors
+		if len(tq.queues) > 0 {
+			tq.populateQueueTable()
+		}
+		if len(tq.pollers) > 0 {
+			tq.populatePollerTable("")
 		}
 	})
 
@@ -155,7 +168,7 @@ func (tq *TaskQueueView) loadData() {
 func (tq *TaskQueueView) showQueueError(err error) {
 	tq.queueTable.ClearRows()
 	tq.queueTable.SetHeaders("NAME", "TYPE", "POLLERS", "BACKLOG")
-	tq.queueTable.AddColoredRow(ui.ColorFailed,
+	tq.queueTable.AddColoredRow(ui.ColorFailed(),
 		"Error loading task queues",
 		err.Error(),
 		"",
@@ -180,13 +193,13 @@ func (tq *TaskQueueView) populateQueueTable() {
 
 	for _, q := range tq.queues {
 		backlogIcon := ui.IconCompleted
-		backlogColor := ui.ColorCompleted
+		backlogColor := ui.ColorCompleted()
 		if q.Backlog > 50 {
 			backlogIcon = ui.IconFailed
-			backlogColor = ui.ColorFailed
+			backlogColor = ui.ColorFailed()
 		} else if q.Backlog > 10 {
 			backlogIcon = ui.IconRunning
-			backlogColor = ui.ColorRunning
+			backlogColor = ui.ColorRunning()
 		}
 
 		typeIcon := ui.IconWorkflow
@@ -315,7 +328,7 @@ func (tq *TaskQueueView) populatePollerTable(queueType string) {
 func (tq *TaskQueueView) showPollerError(err error) {
 	tq.pollerTable.ClearRows()
 	tq.pollerTable.SetHeaders("IDENTITY", "TYPE", "LAST ACCESS")
-	tq.pollerTable.AddColoredRow(ui.ColorFailed,
+	tq.pollerTable.AddColoredRow(ui.ColorFailed(),
 		ui.IconFailed+" Error loading pollers",
 		err.Error(),
 		"",

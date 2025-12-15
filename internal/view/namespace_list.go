@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/atterpac/temportui/internal/config"
 	"github.com/atterpac/temportui/internal/temporal"
 	"github.com/atterpac/temportui/internal/ui"
 	"github.com/gdamore/tcell/v2"
@@ -39,8 +40,8 @@ func NewNamespaceList(app *App) *NamespaceList {
 func (nl *NamespaceList) setup() {
 	nl.table.SetHeaders("NAME", "STATE", "RETENTION")
 	nl.table.SetBorder(false)
-	nl.table.SetBackgroundColor(ui.ColorBg)
-	nl.SetBackgroundColor(ui.ColorBg)
+	nl.table.SetBackgroundColor(ui.ColorBg())
+	nl.SetBackgroundColor(ui.ColorBg())
 
 	// Create panel
 	nl.panel = ui.NewPanel("Namespaces")
@@ -52,6 +53,15 @@ func (nl *NamespaceList) setup() {
 	nl.table.SetOnSelect(func(row int) {
 		if row >= 0 && row < len(nl.namespaces) {
 			nl.app.NavigateToWorkflows(nl.namespaces[row].Name)
+		}
+	})
+
+	// Register for theme changes
+	ui.OnThemeChange(func(_ *config.ParsedTheme) {
+		nl.SetBackgroundColor(ui.ColorBg())
+		// Re-render table with new colors
+		if len(nl.namespaces) > 0 {
+			nl.populateTable()
 		}
 	})
 }
@@ -106,10 +116,10 @@ func (nl *NamespaceList) populateTable() {
 
 	for _, ns := range nl.namespaces {
 		stateIcon := ui.IconConnected
-		color := ui.ColorCompleted
+		color := ui.ColorCompleted()
 		if ns.State == "Deprecated" {
 			stateIcon = ui.IconDisconnected
-			color = ui.ColorFgDim
+			color = ui.ColorFgDim()
 		}
 		nl.table.AddColoredRow(color,
 			ui.IconNamespace+" "+ns.Name,
@@ -126,7 +136,7 @@ func (nl *NamespaceList) populateTable() {
 func (nl *NamespaceList) showError(err error) {
 	nl.table.ClearRows()
 	nl.table.SetHeaders("NAME", "STATE", "RETENTION")
-	nl.table.AddColoredRow(ui.ColorFailed,
+	nl.table.AddColoredRow(ui.ColorFailed(),
 		ui.IconFailed+" Error loading namespaces",
 		err.Error(),
 		"",
