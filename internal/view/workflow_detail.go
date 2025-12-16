@@ -6,9 +6,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/atterpac/temportui/internal/config"
-	"github.com/atterpac/temportui/internal/temporal"
-	"github.com/atterpac/temportui/internal/ui"
+	"github.com/atterpac/loom/internal/config"
+	"github.com/atterpac/loom/internal/temporal"
+	"github.com/atterpac/loom/internal/ui"
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 )
@@ -29,6 +29,7 @@ type WorkflowDetail struct {
 	eventDetailView  *tview.TextView
 	eventTable       *ui.Table
 	loading          bool
+	unsubscribeTheme func()
 }
 
 // NewWorkflowDetail creates a new workflow detail view.
@@ -95,7 +96,7 @@ func (wd *WorkflowDetail) setup() {
 	wd.workflowView.SetText(fmt.Sprintf("\n [%s]Loading...[-]", ui.TagFgDim()))
 
 	// Register for theme changes
-	ui.OnThemeChange(func(_ *config.ParsedTheme) {
+	wd.unsubscribeTheme = ui.OnThemeChange(func(_ *config.ParsedTheme) {
 		wd.SetBackgroundColor(ui.ColorBg())
 		wd.leftFlex.SetBackgroundColor(ui.ColorBg())
 		wd.workflowView.SetBackgroundColor(ui.ColorBg())
@@ -136,6 +137,8 @@ func (wd *WorkflowDetail) loadData() {
 			}
 			wd.workflow = workflow
 			wd.render()
+			// Update hints now that we have workflow status
+			wd.app.UI().Menu().SetHints(wd.Hints())
 		})
 	}()
 
@@ -250,10 +253,16 @@ func formatEventDetails(details string) string {
 		return fmt.Sprintf("[%s]No details[-]", ui.TagFgDim())
 	}
 
-	var sb strings.Builder
-
 	// Split on ", " to get individual fields
 	parts := strings.Split(details, ", ")
+
+	// First pass: find the maximum key length for alignment
+	type kvPair struct {
+		key   string
+		value string
+	}
+	var pairs []kvPair
+	maxKeyLen := 0
 
 	for _, part := range parts {
 		part = strings.TrimSpace(part)
@@ -261,14 +270,27 @@ func formatEventDetails(details string) string {
 			continue
 		}
 
-		// Try to split on ": " for key-value pairs
 		if idx := strings.Index(part, ": "); idx > 0 {
 			key := part[:idx]
 			value := part[idx+2:]
-			sb.WriteString(fmt.Sprintf("[%s::b]%s:[-:-:-] [%s]%s[-]\n", ui.TagFgDim(), key, ui.TagFg(), value))
+			pairs = append(pairs, kvPair{key, value})
+			if len(key) > maxKeyLen {
+				maxKeyLen = len(key)
+			}
 		} else {
-			// No colon found, just display as-is
-			sb.WriteString(fmt.Sprintf("[%s]%s[-]\n", ui.TagFg(), part))
+			pairs = append(pairs, kvPair{"", part})
+		}
+	}
+
+	// Second pass: format with aligned keys
+	var sb strings.Builder
+	for _, kv := range pairs {
+		if kv.key != "" {
+			// Pad key to maxKeyLen for alignment
+			paddedKey := kv.key + strings.Repeat(" ", maxKeyLen-len(kv.key))
+			sb.WriteString(fmt.Sprintf("[%s::b]%s[-:-:-]  [%s]%s[-]\n", ui.TagFgDim(), paddedKey, ui.TagFg(), kv.value))
+		} else {
+			sb.WriteString(fmt.Sprintf("[%s]%s[-]\n", ui.TagFg(), kv.value))
 		}
 	}
 
@@ -276,6 +298,9 @@ func formatEventDetails(details string) string {
 }
 
 func (wd *WorkflowDetail) populateEventTable() {
+	// Preserve current selection
+	currentRow := wd.eventTable.SelectedRow()
+
 	wd.eventTable.ClearRows()
 	wd.eventTable.SetHeaders("ID", "TIME", "TYPE")
 
@@ -290,9 +315,15 @@ func (wd *WorkflowDetail) populateEventTable() {
 	}
 
 	if wd.eventTable.RowCount() > 0 {
-		wd.eventTable.SelectRow(0)
-		if len(wd.events) > 0 {
-			wd.updateEventDetail(wd.events[0])
+		// Restore previous selection if valid, otherwise select first row
+		if currentRow >= 0 && currentRow < len(wd.events) {
+			wd.eventTable.SelectRow(currentRow)
+			wd.updateEventDetail(wd.events[currentRow])
+		} else {
+			wd.eventTable.SelectRow(0)
+			if len(wd.events) > 0 {
+				wd.updateEventDetail(wd.events[0])
+			}
 		}
 	}
 }
@@ -309,6 +340,28 @@ func (wd *WorkflowDetail) Start() {
 		case 'r':
 			wd.loadData()
 			return nil
+		case 'e':
+			// Navigate to event history/graph view
+			wd.app.NavigateToEvents(wd.workflowID, wd.runID)
+			return nil
+		case 'c':
+			wd.showCancelConfirm()
+			return nil
+		case 'X':
+			wd.showTerminateConfirm()
+			return nil
+		case 's':
+			wd.showSignalInput()
+			return nil
+		case 'D':
+			wd.showDeleteConfirm()
+			return nil
+		case 'R':
+			wd.showResetSelector()
+			return nil
+		case 'Q':
+			wd.showQueryInput()
+			return nil
 		}
 		return event
 	})
@@ -318,15 +371,61 @@ func (wd *WorkflowDetail) Start() {
 // Stop is called when the view is deactivated.
 func (wd *WorkflowDetail) Stop() {
 	wd.eventTable.SetInputCapture(nil)
+	if wd.unsubscribeTheme != nil {
+		wd.unsubscribeTheme()
+	}
+	// Clean up component theme listeners to prevent memory leaks and visual glitches
+	wd.eventTable.Destroy()
+	wd.workflowPanel.Destroy()
+	wd.eventDetailPanel.Destroy()
+	wd.eventsPanel.Destroy()
 }
 
 // Hints returns keybinding hints for this view.
 func (wd *WorkflowDetail) Hints() []ui.KeyHint {
-	return []ui.KeyHint{
+	hints := []ui.KeyHint{
+		{Key: "e", Description: "Event Graph"},
 		{Key: "r", Description: "Refresh"},
 		{Key: "j/k", Description: "Navigate"},
-		{Key: "esc", Description: "Back"},
 	}
+
+	// Only show mutation hints if workflow is running
+	if wd.workflow != nil && wd.workflow.Status == "Running" {
+		hints = append(hints,
+			ui.KeyHint{Key: "c", Description: "Cancel"},
+			ui.KeyHint{Key: "X", Description: "Terminate"},
+			ui.KeyHint{Key: "s", Description: "Signal"},
+			ui.KeyHint{Key: "Q", Description: "Query"},
+		)
+	}
+
+	// Reset is available for completed/failed workflows
+	if wd.workflow != nil && (wd.workflow.Status == "Completed" || wd.workflow.Status == "Failed" || wd.workflow.Status == "Terminated" || wd.workflow.Status == "Canceled") {
+		hints = append(hints, ui.KeyHint{Key: "R", Description: "Reset"})
+	}
+
+	hints = append(hints,
+		ui.KeyHint{Key: "D", Description: "Delete"},
+		ui.KeyHint{Key: "T", Description: "Theme"},
+		ui.KeyHint{Key: "esc", Description: "Back"},
+	)
+
+	return hints
+}
+
+// Focus sets focus to the event table.
+func (wd *WorkflowDetail) Focus(delegate func(p tview.Primitive)) {
+	delegate(wd.eventTable)
+}
+
+// Draw applies theme colors dynamically and draws the view.
+func (wd *WorkflowDetail) Draw(screen tcell.Screen) {
+	bg := ui.ColorBg()
+	wd.SetBackgroundColor(bg)
+	wd.leftFlex.SetBackgroundColor(bg)
+	wd.workflowView.SetBackgroundColor(bg)
+	wd.eventDetailView.SetBackgroundColor(bg)
+	wd.Flex.Draw(screen)
 }
 
 func truncateStr(s string, maxLen int) string {
@@ -334,4 +433,486 @@ func truncateStr(s string, maxLen int) string {
 		return s
 	}
 	return s[:maxLen-3] + "..."
+}
+
+// Mutation methods
+
+func (wd *WorkflowDetail) showCancelConfirm() {
+	command := fmt.Sprintf(`temporal workflow cancel \
+  --workflow-id %s \
+  --run-id %s \
+  --namespace %s \
+  --reason "Cancelled via TUI"`,
+		wd.workflowID, wd.runID, wd.app.CurrentNamespace())
+
+	modal := ui.NewConfirmModal(
+		"Cancel Workflow",
+		fmt.Sprintf("Cancel workflow %s?", wd.workflowID),
+		command,
+	).SetOnConfirm(func() {
+		wd.executeCancelWorkflow()
+	}).SetOnCancel(func() {
+		wd.closeModal("confirm-cancel")
+	})
+
+	wd.app.UI().Pages().AddPage("confirm-cancel", modal, true, true)
+	wd.app.UI().SetFocus(modal)
+}
+
+func (wd *WorkflowDetail) executeCancelWorkflow() {
+	provider := wd.app.Provider()
+	if provider == nil {
+		wd.closeModal("confirm-cancel")
+		wd.showError(fmt.Errorf("no provider connected"))
+		return
+	}
+
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+
+		err := provider.CancelWorkflow(ctx,
+			wd.app.CurrentNamespace(),
+			wd.workflowID,
+			wd.runID,
+			"Cancelled via TUI")
+
+		wd.app.UI().QueueUpdateDraw(func() {
+			wd.closeModal("confirm-cancel")
+			if err != nil {
+				wd.showError(err)
+			} else {
+				wd.loadData() // Refresh to show new status
+			}
+		})
+	}()
+}
+
+func (wd *WorkflowDetail) showTerminateConfirm() {
+	command := fmt.Sprintf(`temporal workflow terminate \
+  --workflow-id %s \
+  --run-id %s \
+  --namespace %s \
+  --reason "Terminated via TUI"`,
+		wd.workflowID, wd.runID, wd.app.CurrentNamespace())
+
+	modal := ui.NewConfirmModal(
+		"Terminate Workflow",
+		fmt.Sprintf("Terminate workflow %s?", wd.workflowID),
+		command,
+	).SetWarning("This will forcefully terminate the workflow. No cleanup code will run.").
+		SetOnConfirm(func() {
+			wd.executeTerminateWorkflow()
+		}).SetOnCancel(func() {
+		wd.closeModal("confirm-terminate")
+	})
+
+	wd.app.UI().Pages().AddPage("confirm-terminate", modal, true, true)
+	wd.app.UI().SetFocus(modal)
+}
+
+func (wd *WorkflowDetail) executeTerminateWorkflow() {
+	provider := wd.app.Provider()
+	if provider == nil {
+		wd.closeModal("confirm-terminate")
+		wd.showError(fmt.Errorf("no provider connected"))
+		return
+	}
+
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+
+		err := provider.TerminateWorkflow(ctx,
+			wd.app.CurrentNamespace(),
+			wd.workflowID,
+			wd.runID,
+			"Terminated via TUI")
+
+		wd.app.UI().QueueUpdateDraw(func() {
+			wd.closeModal("confirm-terminate")
+			if err != nil {
+				wd.showError(err)
+			} else {
+				wd.loadData() // Refresh to show new status
+			}
+		})
+	}()
+}
+
+func (wd *WorkflowDetail) showDeleteConfirm() {
+	command := fmt.Sprintf(`temporal workflow delete \
+  --workflow-id %s \
+  --run-id %s \
+  --namespace %s`,
+		wd.workflowID, wd.runID, wd.app.CurrentNamespace())
+
+	modal := ui.NewConfirmModal(
+		"Delete Workflow",
+		fmt.Sprintf("Delete workflow %s?", wd.workflowID),
+		command,
+	).SetWarning("This will permanently delete the workflow and its history. This cannot be undone.").
+		SetOnConfirm(func() {
+			wd.executeDeleteWorkflow()
+		}).SetOnCancel(func() {
+		wd.closeModal("confirm-delete")
+	})
+
+	wd.app.UI().Pages().AddPage("confirm-delete", modal, true, true)
+	wd.app.UI().SetFocus(modal)
+}
+
+func (wd *WorkflowDetail) executeDeleteWorkflow() {
+	provider := wd.app.Provider()
+	if provider == nil {
+		wd.closeModal("confirm-delete")
+		wd.showError(fmt.Errorf("no provider connected"))
+		return
+	}
+
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+
+		err := provider.DeleteWorkflow(ctx,
+			wd.app.CurrentNamespace(),
+			wd.workflowID,
+			wd.runID)
+
+		wd.app.UI().QueueUpdateDraw(func() {
+			wd.closeModal("confirm-delete")
+			if err != nil {
+				wd.showError(err)
+			} else {
+				// Navigate back to workflow list since this workflow no longer exists
+				wd.app.UI().Pages().Pop()
+			}
+		})
+	}()
+}
+
+func (wd *WorkflowDetail) showSignalInput() {
+	fields := []ui.InputField{
+		{
+			Name:        "signalName",
+			Label:       "Signal Name",
+			Placeholder: "e.g., approve, cancel, update",
+			Required:    true,
+		},
+		{
+			Name:        "input",
+			Label:       "Input (JSON)",
+			Placeholder: `e.g., {"approved": true}`,
+			Required:    false,
+		},
+	}
+
+	modal := ui.NewInputModal(
+		"Signal Workflow",
+		fmt.Sprintf("Send signal to workflow %s", wd.workflowID),
+		fields,
+	).SetOnSubmit(func(values map[string]string) {
+		wd.executeSignalWorkflow(values["signalName"], values["input"])
+	}).SetOnCancel(func() {
+		wd.closeModal("signal-input")
+	})
+
+	wd.app.UI().Pages().AddPage("signal-input", modal, true, true)
+	wd.app.UI().SetFocus(modal)
+}
+
+func (wd *WorkflowDetail) executeSignalWorkflow(signalName, input string) {
+	provider := wd.app.Provider()
+	if provider == nil {
+		wd.closeModal("signal-input")
+		wd.showError(fmt.Errorf("no provider connected"))
+		return
+	}
+
+	// Convert input string to bytes (empty if no input provided)
+	var inputBytes []byte
+	if input != "" {
+		inputBytes = []byte(input)
+	}
+
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+
+		err := provider.SignalWorkflow(ctx,
+			wd.app.CurrentNamespace(),
+			wd.workflowID,
+			wd.runID,
+			signalName,
+			inputBytes)
+
+		wd.app.UI().QueueUpdateDraw(func() {
+			wd.closeModal("signal-input")
+			if err != nil {
+				wd.showError(err)
+			} else {
+				wd.loadData() // Refresh to show signal event in history
+			}
+		})
+	}()
+}
+
+func (wd *WorkflowDetail) showResetSelector() {
+	provider := wd.app.Provider()
+	if provider == nil {
+		wd.showError(fmt.Errorf("no provider connected"))
+		return
+	}
+
+	// Show loading state
+	wd.workflowPanel.SetTitle("Workflow (Loading reset points...)")
+
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+
+		resetPoints, err := provider.GetResetPoints(ctx,
+			wd.app.CurrentNamespace(),
+			wd.workflowID,
+			wd.runID)
+
+		wd.app.UI().QueueUpdateDraw(func() {
+			wd.workflowPanel.SetTitle("Workflow")
+
+			if err != nil {
+				wd.showError(fmt.Errorf("failed to get reset points: %w", err))
+				return
+			}
+
+			if len(resetPoints) == 0 {
+				wd.showError(fmt.Errorf("no valid reset points found for this workflow"))
+				return
+			}
+
+			// Check for failure point - if found, show quick reset modal
+			picker := ui.NewResetPicker(resetPoints)
+			if failurePoint, found := picker.GetFirstFailurePoint(); found {
+				wd.showQuickResetModal(failurePoint, resetPoints)
+			} else {
+				// No failure point, show full picker directly
+				wd.showResetPicker(resetPoints)
+			}
+		})
+	}()
+}
+
+func (wd *WorkflowDetail) showQuickResetModal(failurePoint temporal.ResetPoint, allPoints []temporal.ResetPoint) {
+	modal := ui.NewQuickResetModal(wd.workflowID, failurePoint)
+
+	modal.SetOnConfirm(func() {
+		wd.closeModal("quick-reset")
+		wd.showResetConfirm(failurePoint.EventID)
+	})
+
+	modal.SetOnAdvanced(func() {
+		wd.closeModal("quick-reset")
+		wd.showResetPicker(allPoints)
+	})
+
+	modal.SetOnCancel(func() {
+		wd.closeModal("quick-reset")
+	})
+
+	wd.app.UI().Pages().AddPage("quick-reset", modal, true, true)
+	wd.app.UI().SetFocus(modal)
+}
+
+func (wd *WorkflowDetail) showResetPicker(resetPoints []temporal.ResetPoint) {
+	picker := ui.NewResetPicker(resetPoints)
+
+	picker.SetOnSelect(func(eventID int64, description string) {
+		wd.closeModal("reset-picker")
+		wd.showResetConfirm(eventID)
+	})
+
+	picker.SetOnCancel(func() {
+		wd.closeModal("reset-picker")
+	})
+
+	// Create a centered modal layout for the picker
+	height := picker.GetHeight()
+	width := 80
+
+	flex := tview.NewFlex().SetDirection(tview.FlexRow).
+		AddItem(nil, 0, 1, false).
+		AddItem(tview.NewFlex().SetDirection(tview.FlexColumn).
+			AddItem(nil, 0, 1, false).
+			AddItem(picker, width, 0, true).
+			AddItem(nil, 0, 1, false), height, 0, true).
+		AddItem(nil, 0, 1, false)
+	flex.SetBackgroundColor(ui.ColorBg())
+
+	wd.app.UI().Pages().AddPage("reset-picker", flex, true, true)
+	wd.app.UI().SetFocus(picker)
+}
+
+func (wd *WorkflowDetail) showResetConfirm(eventID int64) {
+	wd.closeModal("reset-selector")
+
+	command := fmt.Sprintf(`temporal workflow reset \
+  --workflow-id %s \
+  --run-id %s \
+  --namespace %s \
+  --event-id %d \
+  --reason "Reset via TUI"`,
+		wd.workflowID, wd.runID, wd.app.CurrentNamespace(), eventID)
+
+	modal := ui.NewConfirmModal(
+		"Reset Workflow",
+		fmt.Sprintf("Reset workflow %s to event %d?", wd.workflowID, eventID),
+		command,
+	).SetWarning("This will create a new run from the specified event. The current run will remain unchanged.").
+		SetOnConfirm(func() {
+			wd.executeResetWorkflow(eventID)
+		}).SetOnCancel(func() {
+		wd.closeModal("confirm-reset")
+	})
+
+	wd.app.UI().Pages().AddPage("confirm-reset", modal, true, true)
+	wd.app.UI().SetFocus(modal)
+}
+
+func (wd *WorkflowDetail) executeResetWorkflow(eventID int64) {
+	provider := wd.app.Provider()
+	if provider == nil {
+		wd.closeModal("confirm-reset")
+		wd.showError(fmt.Errorf("no provider connected"))
+		return
+	}
+
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+
+		newRunID, err := provider.ResetWorkflow(ctx,
+			wd.app.CurrentNamespace(),
+			wd.workflowID,
+			wd.runID,
+			eventID,
+			"Reset via TUI")
+
+		wd.app.UI().QueueUpdateDraw(func() {
+			wd.closeModal("confirm-reset")
+			if err != nil {
+				wd.showError(err)
+			} else {
+				// Navigate to the new run
+				wd.runID = newRunID
+				wd.loadData()
+			}
+		})
+	}()
+}
+
+func (wd *WorkflowDetail) closeModal(name string) {
+	wd.app.UI().Pages().RemovePage(name)
+	// Restore focus to current view
+	if current := wd.app.UI().Pages().Current(); current != nil {
+		wd.app.UI().SetFocus(current)
+	}
+}
+
+// Query methods
+
+func (wd *WorkflowDetail) showQueryInput() {
+	// Check if workflow is running - queries only work on running workflows
+	if wd.workflow == nil || wd.workflow.Status != "Running" {
+		wd.showError(fmt.Errorf("queries can only be executed on running workflows"))
+		return
+	}
+
+	fields := []ui.InputField{
+		{
+			Name:        "queryType",
+			Label:       "Query Type",
+			Placeholder: "__stack_trace (or custom query handler name)",
+			Required:    true,
+		},
+		{
+			Name:        "args",
+			Label:       "Arguments (JSON)",
+			Placeholder: `e.g., {"key": "value"} (optional)`,
+			Required:    false,
+		},
+	}
+
+	modal := ui.NewInputModal(
+		"Query Workflow",
+		fmt.Sprintf("Execute query on workflow %s", wd.workflowID),
+		fields,
+	).SetOnSubmit(func(values map[string]string) {
+		wd.executeQuery(values["queryType"], values["args"])
+	}).SetOnCancel(func() {
+		wd.closeModal("query-input")
+	})
+
+	wd.app.UI().Pages().AddPage("query-input", modal, true, true)
+	wd.app.UI().SetFocus(modal)
+}
+
+func (wd *WorkflowDetail) executeQuery(queryType, args string) {
+	wd.closeModal("query-input")
+
+	provider := wd.app.Provider()
+	if provider == nil {
+		wd.showError(fmt.Errorf("no provider connected"))
+		return
+	}
+
+	// Convert args string to bytes (empty if no args provided)
+	var argsBytes []byte
+	if args != "" {
+		argsBytes = []byte(args)
+	}
+
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+
+		result, err := provider.QueryWorkflow(ctx,
+			wd.app.CurrentNamespace(),
+			wd.workflowID,
+			wd.runID,
+			queryType,
+			argsBytes)
+
+		wd.app.UI().QueueUpdateDraw(func() {
+			if err != nil {
+				wd.showQueryError(queryType, err.Error())
+				return
+			}
+			if result.Error != "" {
+				wd.showQueryError(queryType, result.Error)
+				return
+			}
+			wd.showQueryResult(queryType, result.Result)
+		})
+	}()
+}
+
+func (wd *WorkflowDetail) showQueryResult(queryType, result string) {
+	modal := ui.NewQueryResultModal().
+		SetResult(queryType, result).
+		SetOnClose(func() {
+			wd.closeModal("query-result")
+		})
+
+	wd.app.UI().Pages().AddPage("query-result", modal, true, true)
+	wd.app.UI().SetFocus(modal)
+}
+
+func (wd *WorkflowDetail) showQueryError(queryType, errMsg string) {
+	modal := ui.NewQueryResultModal().
+		SetError(queryType, errMsg).
+		SetOnClose(func() {
+			wd.closeModal("query-result")
+		})
+
+	wd.app.UI().Pages().AddPage("query-result", modal, true, true)
+	wd.app.UI().SetFocus(modal)
 }

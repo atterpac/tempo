@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/atterpac/temportui/internal/config"
-	"github.com/atterpac/temportui/internal/temporal"
-	"github.com/atterpac/temportui/internal/ui"
+	"github.com/atterpac/loom/internal/config"
+	"github.com/atterpac/loom/internal/temporal"
+	"github.com/atterpac/loom/internal/ui"
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 )
@@ -23,16 +23,17 @@ type taskQueueEntry struct {
 // TaskQueueView displays task queue information.
 type TaskQueueView struct {
 	*tview.Flex
-	app            *App
-	queueTable     *ui.Table
-	pollerTable    *ui.Table
-	queuePanel     *ui.Panel
-	pollerPanel    *ui.Panel
-	queues         []taskQueueEntry
-	pollers        []temporal.Poller
-	selectedQueue  string
-	loading        bool
-	suppressSelect bool // Prevent recursive selection handling
+	app              *App
+	queueTable       *ui.Table
+	pollerTable      *ui.Table
+	queuePanel       *ui.Panel
+	pollerPanel      *ui.Panel
+	queues           []taskQueueEntry
+	pollers          []temporal.Poller
+	selectedQueue    string
+	loading          bool
+	suppressSelect   bool // Prevent recursive selection handling
+	unsubscribeTheme func()
 }
 
 // NewTaskQueueView creates a new task queue view.
@@ -81,7 +82,7 @@ func (tq *TaskQueueView) setup() {
 	})
 
 	// Register for theme changes
-	ui.OnThemeChange(func(_ *config.ParsedTheme) {
+	tq.unsubscribeTheme = ui.OnThemeChange(func(_ *config.ParsedTheme) {
 		tq.SetBackgroundColor(ui.ColorBg())
 		// Re-render tables with new colors
 		if len(tq.queues) > 0 {
@@ -188,6 +189,9 @@ func (tq *TaskQueueView) loadMockQueues() {
 }
 
 func (tq *TaskQueueView) populateQueueTable() {
+	// Preserve current selection
+	currentRow := tq.queueTable.SelectedRow()
+
 	tq.queueTable.ClearRows()
 	tq.queueTable.SetHeaders("NAME", "TYPE", "POLLERS", "BACKLOG")
 
@@ -224,7 +228,12 @@ func (tq *TaskQueueView) populateQueueTable() {
 		if !wasSuppress {
 			tq.suppressSelect = true
 		}
-		tq.queueTable.SelectRow(0)
+		// Restore previous selection if valid, otherwise select first row
+		if currentRow >= 0 && currentRow < len(tq.queues) {
+			tq.queueTable.SelectRow(currentRow)
+		} else {
+			tq.queueTable.SelectRow(0)
+		}
 		if !wasSuppress {
 			tq.suppressSelect = false
 		}
@@ -381,6 +390,14 @@ func (tq *TaskQueueView) Start() {
 func (tq *TaskQueueView) Stop() {
 	tq.queueTable.SetInputCapture(nil)
 	tq.pollerTable.SetInputCapture(nil)
+	if tq.unsubscribeTheme != nil {
+		tq.unsubscribeTheme()
+	}
+	// Clean up component theme listeners to prevent memory leaks and visual glitches
+	tq.queueTable.Destroy()
+	tq.pollerTable.Destroy()
+	tq.queuePanel.Destroy()
+	tq.pollerPanel.Destroy()
 }
 
 // Hints returns keybinding hints for this view.
@@ -389,6 +406,19 @@ func (tq *TaskQueueView) Hints() []ui.KeyHint {
 		{Key: "r", Description: "Refresh"},
 		{Key: "tab", Description: "Switch Panel"},
 		{Key: "j/k", Description: "Navigate"},
+		{Key: "T", Description: "Theme"},
 		{Key: "esc", Description: "Back"},
 	}
+}
+
+// Focus sets focus to the queue table.
+func (tq *TaskQueueView) Focus(delegate func(p tview.Primitive)) {
+	delegate(tq.queueTable)
+}
+
+// Draw applies theme colors dynamically and draws the view.
+func (tq *TaskQueueView) Draw(screen tcell.Screen) {
+	bg := ui.ColorBg()
+	tq.SetBackgroundColor(bg)
+	tq.Flex.Draw(screen)
 }
