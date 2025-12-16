@@ -512,9 +512,10 @@ const Logo = `loom`
 // LogoSmall is a compact version
 const LogoSmall = "loom"
 
-// StatusIcon returns the icon for a workflow status.
+// StatusIcon returns the icon for a workflow or namespace status.
 func StatusIcon(status string) string {
 	switch status {
+	// Workflow statuses
 	case "Running":
 		return IconRunning
 	case "Completed":
@@ -527,14 +528,22 @@ func StatusIcon(status string) string {
 		return IconTerminated
 	case "TimedOut":
 		return IconTimedOut
+	// Namespace states
+	case "Active":
+		return IconConnected
+	case "Deprecated":
+		return IconDisconnected
+	case "Deleted":
+		return IconFailed
 	default:
 		return IconPending
 	}
 }
 
-// StatusColorTcell returns the tcell color for a workflow status.
+// StatusColorTcell returns the tcell color for a workflow or namespace status.
 func StatusColorTcell(status string) tcell.Color {
 	switch status {
+	// Workflow statuses
 	case "Running":
 		return ColorRunning()
 	case "Completed":
@@ -547,6 +556,13 @@ func StatusColorTcell(status string) tcell.Color {
 		return ColorTerminated()
 	case "TimedOut":
 		return ColorTimedOut()
+	// Namespace states
+	case "Active":
+		return ColorCompleted()
+	case "Deprecated":
+		return ColorFgDim()
+	case "Deleted":
+		return ColorFailed()
 	default:
 		return ColorFg()
 	}
@@ -562,12 +578,14 @@ func StatusColorTag(status string) string {
 		switch status {
 		case "Running":
 			return "#f9e2af"
-		case "Completed":
+		case "Completed", "Active":
 			return "#a6e3a1"
-		case "Failed":
+		case "Failed", "Deleted":
 			return "#f38ba8"
 		case "Canceled":
 			return "#fab387"
+		case "Deprecated":
+			return "#6c7086"
 		case "Terminated":
 			return "#cba6f7"
 		case "TimedOut":
@@ -580,12 +598,14 @@ func StatusColorTag(status string) string {
 	switch status {
 	case "Running":
 		return activeTheme.Tags.Running
-	case "Completed":
+	case "Completed", "Active":
 		return activeTheme.Tags.Completed
-	case "Failed":
+	case "Failed", "Deleted":
 		return activeTheme.Tags.Failed
 	case "Canceled":
 		return activeTheme.Tags.Canceled
+	case "Deprecated":
+		return activeTheme.Tags.FgDim
 	case "Terminated":
 		return activeTheme.Tags.Terminated
 	case "TimedOut":

@@ -224,15 +224,9 @@ func (nl *NamespaceList) populateTable() {
 	nl.leftPanel.SetContent(nl.table)
 
 	for _, ns := range nl.namespaces {
-		stateIcon := ui.IconConnected
-		color := ui.ColorCompleted()
-		if ns.State == "Deprecated" {
-			stateIcon = ui.IconDisconnected
-			color = ui.ColorFgDim()
-		}
-		nl.table.AddColoredRow(color,
+		nl.table.AddStyledRow(ns.State,
 			ui.IconNamespace+" "+ns.Name,
-			stateIcon+" "+ns.State,
+			ns.State,
 			ns.RetentionPeriod,
 		)
 	}

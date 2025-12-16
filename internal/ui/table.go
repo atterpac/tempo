@@ -62,7 +62,7 @@ func (t *Table) refreshCellColors() {
 	fgDimColor := ColorFgDim()
 
 	// Status strings to detect and update status column colors
-	statusStrings := []string{"Running", "Completed", "Failed", "Canceled", "Terminated", "TimedOut"}
+	statusStrings := []string{"Running", "Completed", "Failed", "Canceled", "Terminated", "TimedOut", "Active", "Deprecated"}
 
 	for row := 0; row < rowCount; row++ {
 		for col := 0; col < colCount; col++ {
