@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-You are continuing development on `temporal-tui`, a terminal UI for Temporal workflow visualization built with Go and tview. The UI layer is complete with mock data. Your task is to implement real Temporal SDK integration.
+You are continuing development on `loom`, a terminal UI for Temporal workflow visualization built with Go and tview. The UI layer is complete with mock data. Your task is to implement real Temporal SDK integration.
 
 ## Current State
 
@@ -13,7 +13,7 @@ You are continuing development on `temporal-tui`, a terminal UI for Temporal wor
 ## Project Structure
 
 ```
-temportui/
+loom/
 ├── cmd/
 │   └── main.go                    # Entry point (needs provider injection)
 ├── internal/

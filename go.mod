@@ -1,4 +1,4 @@
-module github.com/atterpac/temportui
+module github.com/atterpac/loom
 
 go 1.25.2
 

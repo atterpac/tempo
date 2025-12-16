@@ -5,7 +5,7 @@
 
 ## Project Overview
 
-Implementing real Temporal SDK integration for `temporal-tui`, a terminal UI for Temporal workflow visualization. The UI layer is complete with mock data.
+Implementing real Temporal SDK integration for `loom`, a terminal UI for Temporal workflow visualization. The UI layer is complete with mock data.
 
 ## User Requirements
 
@@ -357,7 +357,7 @@ When starting a new agent session, use the prompt in the "Agent Handoff Prompt" 
 All phases are complete. The application is ready for production use.
 
 ```
-temporal-tui - Temporal Workflow Visualization TUI
+loom - Temporal Workflow Visualization TUI
 
 All implementation phases complete:
 - Phase 1: Core Infrastructure ✅
