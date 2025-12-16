@@ -368,6 +368,11 @@ func (nl *NamespaceList) Hints() []ui.KeyHint {
 
 // Focus sets focus to the table (which has the input handlers).
 func (nl *NamespaceList) Focus(delegate func(p tview.Primitive)) {
+	// If showing empty state, focus the flex container instead
+	if len(nl.namespaces) == 0 {
+		delegate(nl.Flex)
+		return
+	}
 	delegate(nl.table)
 }
 

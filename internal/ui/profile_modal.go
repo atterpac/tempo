@@ -24,7 +24,7 @@ func NewProfileModal() *ProfileModal {
 	pm := &ProfileModal{
 		Modal: NewModal(ModalConfig{
 			Title:     "Connection Profiles",
-			Width:     50,
+			Width:     60,
 			Height:    8,
 			MinHeight: 8,
 			MaxHeight: 20,
@@ -97,11 +97,11 @@ func (pm *ProfileModal) setup() {
 
 	pm.SetContent(pm.table)
 	pm.SetHints([]KeyHint{
-		{Key: "j/k", Description: "Navigate"},
+		{Key: "j/k", Description: "Nav"},
 		{Key: "Enter", Description: "Select"},
 		{Key: "n", Description: "New"},
 		{Key: "e", Description: "Edit"},
-		{Key: "d", Description: "Delete"},
+		{Key: "d", Description: "Del"},
 		{Key: "Esc", Description: "Close"},
 	})
 

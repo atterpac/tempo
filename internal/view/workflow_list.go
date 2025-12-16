@@ -496,6 +496,7 @@ func (wl *WorkflowList) Start() {
 // Stop is called when the view is deactivated.
 func (wl *WorkflowList) Stop() {
 	wl.table.SetInputCapture(nil)
+	wl.Flex.SetInputCapture(nil)
 	wl.stopAutoRefresh()
 	if wl.unsubscribeTheme != nil {
 		wl.unsubscribeTheme()
@@ -558,6 +559,11 @@ func (wl *WorkflowList) Hints() []ui.KeyHint {
 
 // Focus sets focus to the table (which has the input handlers).
 func (wl *WorkflowList) Focus(delegate func(p tview.Primitive)) {
+	// If showing empty state, focus the flex container instead
+	if len(wl.workflows) == 0 && len(wl.allWorkflows) == 0 {
+		delegate(wl.Flex)
+		return
+	}
 	delegate(wl.table)
 }
 
