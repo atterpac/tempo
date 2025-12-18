@@ -18,6 +18,7 @@ import (
 	"go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	namespacepb "go.temporal.io/api/namespace/v1"
+	"go.temporal.io/api/operatorservice/v1"
 	"go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/client"
@@ -418,6 +419,17 @@ func (c *Client) DeprecateNamespace(ctx context.Context, name string) error {
 	})
 	if err != nil {
 		return fmt.Errorf("failed to deprecate namespace: %w", err)
+	}
+	return nil
+}
+
+// DeleteNamespace permanently deletes a namespace.
+func (c *Client) DeleteNamespace(ctx context.Context, name string) error {
+	_, err := c.client.OperatorService().DeleteNamespace(ctx, &operatorservice.DeleteNamespaceRequest{
+		Namespace: name,
+	})
+	if err != nil {
+		return fmt.Errorf("failed to delete namespace: %w", err)
 	}
 	return nil
 }

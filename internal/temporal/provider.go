@@ -26,6 +26,10 @@ type Provider interface {
 	// Deprecated namespaces prevent new workflow executions but allow existing ones to complete.
 	DeprecateNamespace(ctx context.Context, name string) error
 
+	// DeleteNamespace permanently deletes a namespace.
+	// The namespace must be deprecated first before it can be deleted.
+	DeleteNamespace(ctx context.Context, name string) error
+
 	// ListWorkflows returns workflows for a namespace with optional filtering.
 	ListWorkflows(ctx context.Context, namespace string, opts ListOptions) ([]Workflow, string, error)
 
@@ -176,6 +180,8 @@ type Workflow struct {
 	EndTime   *time.Time
 	ParentID  *string
 	Memo      map[string]string
+	Input     string // JSON-formatted workflow input
+	Output    string // JSON-formatted workflow result (or failure message)
 }
 
 // HistoryEvent represents a workflow history event.
