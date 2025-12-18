@@ -8,8 +8,9 @@ import (
 // Panel is a container with rounded borders and an optional title.
 type Panel struct {
 	*tview.Box
-	content tview.Primitive
-	title   string
+	content         tview.Primitive
+	title           string
+	titleColorOverride *tcell.Color
 }
 
 // NewPanel creates a new panel with rounded borders.
@@ -43,8 +44,14 @@ func (p *Panel) SetBorderColor(color tcell.Color) *Panel {
 	return p
 }
 
-// SetTitleColor is a no-op - colors are read dynamically.
+// SetTitleColor sets a custom title color, overriding the theme default.
+// Pass tcell.ColorDefault to reset to theme default.
 func (p *Panel) SetTitleColor(color tcell.Color) *Panel {
+	if color == tcell.ColorDefault {
+		p.titleColorOverride = nil
+	} else {
+		p.titleColorOverride = &color
+	}
 	return p
 }
 
@@ -54,6 +61,9 @@ func (p *Panel) Draw(screen tcell.Screen) {
 	bgColor := ColorBg()
 	borderColor := ColorPanelBorder()
 	titleColor := ColorPanelTitle()
+	if p.titleColorOverride != nil {
+		titleColor = *p.titleColorOverride
+	}
 
 	p.Box.SetBackgroundColor(bgColor)
 	p.Box.DrawForSubclass(screen, p)
