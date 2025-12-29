@@ -119,8 +119,15 @@ func (eh *EventHistory) setup() {
 		// Optionally toggle side panel on enter
 	})
 
-	// Timeline view selection handler
+	// Timeline view selection handler (Enter key)
 	eh.timelineView.SetOnSelect(func(lane *TimelineLane) {
+		if lane != nil && lane.Node != nil {
+			eh.updateSidePanelFromTree(lane.Node)
+		}
+	})
+
+	// Timeline view selection change handler (navigation)
+	eh.timelineView.SetOnSelectionChange(func(lane *TimelineLane) {
 		if lane != nil && lane.Node != nil {
 			eh.updateSidePanelFromTree(lane.Node)
 		}
