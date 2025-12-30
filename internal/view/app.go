@@ -430,7 +430,7 @@ func (a *App) Run() error {
 	return a.app.Run()
 }
 
-// checkForUpdates checks for available updates and shows a toast notification.
+// checkForUpdates checks for updates and automatically applies them.
 func (a *App) checkForUpdates() {
 	updater := update.NewUpdater()
 
@@ -447,39 +447,16 @@ func (a *App) checkForUpdates() {
 		return
 	}
 
-	// Show update available toast with action
-	a.app.QueueUpdateDraw(func() {
-		a.toasts.ShowWithAction(
-			fmt.Sprintf("Update %s available", info.LatestVersion),
-			components.ToastInfo,
-			components.ToastAction{Label: "Update", Handler: func() {
-				go a.performUpdate(info)
-			}},
-			components.ToastAction{Label: "Dismiss", Handler: func() {}},
-		)
-	})
-}
+	// Apply update automatically
+	updateCtx, updateCancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer updateCancel()
 
-// performUpdate downloads and applies the update.
-func (a *App) performUpdate(info *update.UpdateInfo) {
-	updater := update.NewUpdater()
-
-	// Show downloading toast
-	a.app.QueueUpdateDraw(func() {
-		a.toasts.Info("Downloading update...")
-	})
-
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
-	defer cancel()
-
-	err := updater.ApplyUpdate(ctx, info)
+	if err := updater.ApplyUpdate(updateCtx, info); err != nil {
+		return
+	}
 
 	a.app.QueueUpdateDraw(func() {
-		if err != nil {
-			a.toasts.Error(fmt.Sprintf("Update failed: %v", err))
-		} else {
-			a.toasts.Success(fmt.Sprintf("Updated to %s! Please restart tempo", info.LatestVersion))
-		}
+		a.toasts.Success("Updated, restart plz " + theme.IconHeart)
 	})
 }
 
