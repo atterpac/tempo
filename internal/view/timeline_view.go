@@ -5,7 +5,7 @@ import (
 	"time"
 
 	"github.com/atterpac/jig/theme"
-	"github.com/atterpac/tempo/internal/temporal"
+	"github.com/galaxy-io/tempo/internal/temporal"
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 )

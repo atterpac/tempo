@@ -13,7 +13,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/atterpac/tempo/internal/config"
+	"github.com/galaxy-io/tempo/internal/config"
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"

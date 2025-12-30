@@ -8,7 +8,7 @@ vars:
     sh: git rev-parse --short HEAD 2>/dev/null || echo "unknown"
   BUILD_DATE:
     sh: date -u +"%Y-%m-%dT%H:%M:%SZ"
-  LDFLAGS: -s -w -X github.com/atterpac/tempo/internal/update.Version={{.VERSION}} -X github.com/atterpac/tempo/internal/update.Commit={{.COMMIT}} -X github.com/atterpac/tempo/internal/update.BuildDate={{.BUILD_DATE}}
+  LDFLAGS: -s -w -X github.com/galaxy-io/tempo/internal/update.Version={{.VERSION}} -X github.com/galaxy-io/tempo/internal/update.Commit={{.COMMIT}} -X github.com/galaxy-io/tempo/internal/update.BuildDate={{.BUILD_DATE}}
 
 tasks:
   default:

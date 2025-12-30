@@ -6,7 +6,7 @@ import (
 )
 
 // Version information - injected at build time via ldflags:
-// go build -ldflags "-X github.com/atterpac/tempo/internal/update.Version=1.2.3 -X github.com/atterpac/tempo/internal/update.Commit=abc123 -X github.com/atterpac/tempo/internal/update.BuildDate=2024-01-01"
+// go build -ldflags "-X github.com/galaxy-io/tempo/internal/update.Version=1.2.3 -X github.com/galaxy-io/tempo/internal/update.Commit=abc123 -X github.com/galaxy-io/tempo/internal/update.BuildDate=2024-01-01"
 var (
 	Version   = "dev"
 	Commit    = "unknown"
@@ -15,7 +15,7 @@ var (
 
 func init() {
 	// If version wasn't set via ldflags, try to get it from Go's build info
-	// This works when installed via: go install github.com/atterpac/tempo/cmd/tempo@latest
+	// This works when installed via: go install github.com/galaxy-io/tempo/cmd/tempo@latest
 	if Version == "dev" {
 		if info, ok := debug.ReadBuildInfo(); ok {
 			// Module version (e.g., "v0.0.6" or "(devel)")

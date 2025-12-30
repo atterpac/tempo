@@ -1,4 +1,4 @@
-module github.com/atterpac/tempo
+module github.com/galaxy-io/tempo
 
 go 1.25.2
 

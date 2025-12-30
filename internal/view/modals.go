@@ -9,8 +9,8 @@ import (
 	"github.com/atterpac/jig/theme"
 	"github.com/atterpac/jig/theme/themes"
 	"github.com/atterpac/jig/util"
-	"github.com/atterpac/tempo/internal/config"
-	"github.com/atterpac/tempo/internal/update"
+	"github.com/galaxy-io/tempo/internal/config"
+	"github.com/galaxy-io/tempo/internal/update"
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 )

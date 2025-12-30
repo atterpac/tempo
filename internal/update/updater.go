@@ -10,7 +10,7 @@ import (
 )
 
 const (
-	repoOwner = "atterpac"
+	repoOwner = "galaxy-io"
 	repoName  = "tempo"
 )
 

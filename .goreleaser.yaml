@@ -19,9 +19,9 @@ builds:
       - arm64
     ldflags:
       - -s -w
-      - -X github.com/atterpac/tempo/internal/update.Version={{.Version}}
-      - -X github.com/atterpac/tempo/internal/update.Commit={{.Commit}}
-      - -X github.com/atterpac/tempo/internal/update.BuildDate={{.Date}}
+      - -X github.com/galaxy-io/tempo/internal/update.Version={{.Version}}
+      - -X github.com/galaxy-io/tempo/internal/update.Commit={{.Commit}}
+      - -X github.com/galaxy-io/tempo/internal/update.BuildDate={{.Date}}
 
 archives:
   - id: tempo
@@ -46,7 +46,7 @@ changelog:
 
 release:
   github:
-    owner: atterpac
+    owner: galaxy-io
     name: tempo
   draft: false
   prerelease: auto
@@ -54,11 +54,11 @@ release:
 brews:
   - name: tempo
     repository:
-      owner: atterpac
+      owner: galaxy-io
       name: homebrew-tap
       token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
     directory: Formula
-    homepage: "https://github.com/atterpac/tempo"
+    homepage: "https://github.com/galaxy-io/tempo"
     description: "Terminal UI for Temporal workflow management"
     license: "MIT"
     install: |
